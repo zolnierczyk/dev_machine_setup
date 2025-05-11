@@ -80,9 +80,15 @@ packages_to_install=(
     mc # Midnight Commander, a file manager
     meld # File and directory comparison tool
     build-essential # Basic compilation tools (gcc, g++, make)
+    clang # C/C++ compiler
+    clang-format # Code formatter for C/C++
+    clang-tidy # C++ code analysis tool
+    clang-tools # Additional tools for Clang
     python3-dev
     python3-pip
     python3-venv # For creating Python 3 virtual environments
+    pylint3 # Python linter
+    python3-pytest # Testing framework for Python
     cmake
     ninja-build # Ninja build system
     ccache # Compiler cache
@@ -195,50 +201,26 @@ download_and_install() {
 }
 
 download_and_install "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" "$VSCODE_DEB" "Visual Studio Code"
-download_and_install "https://downloads.slack-edge.com/linux_releases/slack-desktop-latest-amd64.deb" "$SLACK_DEB" "Slack"
-
+# It looks like the URL for Slack deb package always contains version number
+download_and_install "https://downloads.slack-edge.com/desktop-releases/linux/x64/4.43.51/slack-desktop-4.43.51-amd64.deb" "$SLACK_DEB" "Slack"
 print_header "Manual installation of Visual Studio Code and Slack finished."
 echo ""
 
 # --- SECTION: COPYING DOTFILES ---
-# Place your dotfile copying logic here
-# Example:
-# echo "---------------------------------------------------------------------"
-# echo "Copying configuration files (dotfiles)..."
-# echo "---------------------------------------------------------------------"
-# DOTFILES_REPO_URL="https://github.com/YOUR_USER/YOUR_DOTFILES_REPO.git" # Change to your repository URL
-# DOTFILES_DIR="$HOME/.dotfiles" # Directory where you'll clone the repository
-#
-# if [ -d "$DOTFILES_DIR" ]; then
-#   echo "Directory $DOTFILES_DIR already exists. Updating..."
-#   cd "$DOTFILES_DIR"
-#   git pull
-#   cd "$HOME"
-# else
-#   echo "Cloning dotfiles repository..."
-#   git clone "$DOTFILES_REPO_URL" "$DOTFILES_DIR"
-# fi
-#
-# # Example using 'stow' to link files (if you use stow)
-# # sudo apt install -y stow # Make sure stow is installed
-# # cd "$DOTFILES_DIR"
-# # stow CONFIG_DIRECTORY_NAME # e.g., stow zsh, stow vim
-# # cd "$HOME"
-#
-# # Alternatively, manual creation of symlinks:
-# # ln -sf "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
-# # ln -sf "$DOTFILES_DIR/.vimrc" "$HOME/.vimrc"
-# # ...and so on for other files
-#
-# echo "Dotfiles copying finished."
-# echo "---------------------------------------------------------------------"
-# echo ""
+# This section has been removed. Use dump_config.bash to extract configurations
+# and install_config.bash to install them on a new machine.
+
+print_header Installing VIM plugins...
+curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 
 # Final message
 echo "---------------------------------------------------------------------"
 echo "Script execution finished."
 echo "Restart your terminal or computer to apply changes (e.g., default shell change)."
 echo "If you encounter any issues, please check the log file at $LOG_FILE."
+echo "Remember to manually:"
+echo " - change the default shell to Zsh using: chsh -s /usr/bin/zsh"
+echo " - do in vim :PlugInstall to install plugins."
 echo "Please check git setup: "
 echo "Name: $(git config --global user.name)"
 echo "Email: $(git config --global user.email)"
