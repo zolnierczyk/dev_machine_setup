@@ -77,6 +77,7 @@ packages_to_install=(
     # Developer tools
     git
     vim
+    mc # Midnight Commander, a file manager
     meld # File and directory comparison tool
     build-essential # Basic compilation tools (gcc, g++, make)
     python3-dev
@@ -187,7 +188,7 @@ download_and_install() {
     fi
 
     echo "Installing $name..."
-    if ! sudo apt install -y "$output"; then
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$output"; then
         echo "ERROR: Failed to install $name. Exiting."
         exit 1
     fi
