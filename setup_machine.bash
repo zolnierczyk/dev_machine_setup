@@ -37,6 +37,8 @@ packages_to_install=(
     nmap
     curl
     wget # For downloading files
+    terminator # Terminal emulator
+    tmux # Terminal multiplexer
     tcpdump
     net-tools # Contains netstat, ifconfig, etc.
     iftop
