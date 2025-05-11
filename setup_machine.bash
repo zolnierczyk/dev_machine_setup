@@ -47,7 +47,6 @@ packages_to_install=(
     htop
     tiptop # Alternative to htop
     iotop # Disk I/O monitoring 
-    dstat # Versatile resource statistics
     sysstat # Contains mpstat, iostat, sar, pidstat
     nicstat # Network interface statistics
     smem # Memory usage reporting tool
