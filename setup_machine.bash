@@ -2,8 +2,14 @@
 set -euo pipefail
 
 # Additional logging setup
-LOG_FILE="/var/log/setup_machine.log"
+LOG_FILE="/tmp/setup_machine.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Check if the script is running on Ubuntu 24.04
+if ! grep -q "DISTRIB_RELEASE=24.04" /etc/lsb-release; then
+    echo "ERROR: This script is designed to run on Ubuntu 24.04. Exiting."
+    exit 1
+fi
 
 print_header() {
     echo "---------------------------------------------------------------------"
@@ -12,7 +18,10 @@ print_header() {
 }
 
 # Welcome message
-print_header "Automatic Xubuntu Setup Script by Gemini 2.5 Pro"
+print_header "Automatic Xubuntu Setup Script by Gemini 2.5 Pro and ChatGPT 4.0"
+echo "This script will install and configure essential packages for your Xubuntu system."
+echo "Please ensure you have a stable internet connection and sufficient permissions to install packages."
+echo ""
 
 echo "Starting package list update..."
 sudo apt update
@@ -35,7 +44,7 @@ packages_to_install=(
     moreutils # Contains 'ts' (timestamp)
     htop
     tiptop # Alternative to htop
-    iotop # Disk I/O monitoring
+    iotop # Disk I/O monitoring 
     dstat # Versatile resource statistics
     sysstat # Contains mpstat, iostat, sar, pidstat
     nicstat # Network interface statistics
@@ -47,11 +56,9 @@ packages_to_install=(
     ca-certificates
     isc-dhcp-server # DHCP server, if you use it locally
     strongswan # VPN client
-    strongswan-plugin-eap-mschapv2 # Plugin for strongswan
-    libcharon-extra-plugins # Plugins for strongswan
-    libstrongswan-extra-plugins # Plugins for strongswan
     libstrongswan-standard-plugins # Plugins for strongswan
-    libcharon-standard-plugins # Plugins for strongswan
+    libstrongswan-extra-plugins # Plugins for strongswan
+    libcharon-extra-plugins # Plugins for strongswan
     xl2tpd # L2TP VPN client
     nfs-common # For NFS support
     cifs-utils # For SMB/CIFS share support
@@ -61,6 +68,11 @@ packages_to_install=(
     software-properties-common # For PPA repository management
     openssl
     pax-utils # Contains dumpelf
+    netcat-openbsd
+    wireshark # Network protocol analyzer
+    tcpflow # TCP flow analysis
+    tcpick # TCP packet capture
+    mtr # Network diagnostic tool
 
     # Developer tools
     git
@@ -104,10 +116,7 @@ packages_to_install=(
     imagemagick # For image processing
     exif # For reading EXIF metadata from images
     pylint # Linter for Python
-    ipython # Interactive Python shell
     vlc # Multimedia player
-    ffplay # Multimedia player from FFmpeg
-    ffprobe # Stream analysis tool from FFmpeg
     ffmpeg # Multimedia conversion and streaming tool
     baobab # Disk usage analyzer
     blender # 3D graphics software
@@ -115,19 +124,18 @@ packages_to_install=(
     chrony # NTP implementation, often used as a replacement for ntpd
     shutter # Screenshot tool
     gimp # Raster graphics editor
-    inkscape # Vector graphics editor
     xscreensaver # Screensaver
     minicom # Serial communication program
     putty # SSH, Telnet, Rlogin, Serial client
     zsh # Z shell, an alternative shell
-    oh-my-zsh # Framework for managing Zsh configuration
     fonts-powerline # Powerline fonts for Zsh
 )
 
 # Loop to install all packages from the list
 for pkg in "${packages_to_install[@]}"; do
+    echo "---------------------------------------------------------------------"
     echo "Attempting to install/update $pkg..."
-    sudo apt install -y "$pkg"
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg"
     if [ $? -eq 0 ]; then
         echo "Package $pkg processed successfully (installed/updated or already present)."
     else
