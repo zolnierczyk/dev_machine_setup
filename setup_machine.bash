@@ -86,9 +86,7 @@ packages_to_install=(
     clang-tools # Additional tools for Clang
     python3-dev
     python3-pip
-    python3-venv # For creating Python 3 virtual environments
-    pylint3 # Python linter
-    python3-pytest # Testing framework for Python
+    python3-venv # For creating Python 3 virtual environment
     cmake
     ninja-build # Ninja build system
     ccache # Compiler cache
