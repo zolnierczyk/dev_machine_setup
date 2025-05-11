@@ -168,6 +168,23 @@ echo "Please manually change the default shell to Zsh using: chsh -s /usr/bin/zs
 print_header "Oh My Zsh installation and configuration completed."
 echo ""
 
+# --- SECTION: INSTALLATION OF GitHub CLI ---
+print_header "Installing GitHub CLI..."
+# Check if gh is already installed
+if command -v gh >/dev/null 2>&1; then
+    echo "GitHub CLI (gh) is already installed. Skipping installation."
+else
+    echo "GitHub CLI (gh) not found. Installing..."
+    (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+            && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+fi
+
 # --- SECTION: MANUAL DEBIAN PACKAGE INSTALLATION ---
 print_header "Installing Visual Studio Code and Slack via .deb packages..."
 
