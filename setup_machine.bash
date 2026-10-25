@@ -121,7 +121,6 @@ packages_to_install=(
     libopencv-dev # OpenCV for image processing
 
     # Other tools
-    tldr # Simplified man pages
     unzip
     virtualenv # For creating Python virtual environments (general)
     imagemagick # For image processing
