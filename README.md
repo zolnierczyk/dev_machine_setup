@@ -1,6 +1,6 @@
 # dev_machine_setup
 
-This is repository with setup script and configuration for may mostly embedded C++ development machines.
+This repo contains scripts which have one and only one goal: copy all my dev setup from an old machine to a new one. The reason was very simple, as I switch laptops frequently because of many reasons. Although there are some ready-to-use tools for similar use cases, I decided to do it on my own to have full control over what is copied where. Another reason was to learn something about scripting, bash, Docker, GitHub and AI development.
 
 ## Disclaimer
 
