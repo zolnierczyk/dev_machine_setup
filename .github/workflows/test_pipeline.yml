@@ -21,6 +21,9 @@ jobs:
     - name: Set up Docker
       uses: docker/setup-buildx-action@v2
 
+    - name: Sanity Test Config Scripts
+      run: bash test_config_scripts.sh
+
     - name: Build and Test Setup Machine Script
       run: |
         chmod +x test_setup_machine.sh
