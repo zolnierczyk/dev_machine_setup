@@ -5,9 +5,9 @@ set -euo pipefail
 LOG_FILE="/tmp/setup_machine.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-# Check if the script is running on Ubuntu 24.04
-if ! grep -q "DISTRIB_RELEASE=24.04" /etc/lsb-release; then
-    echo "ERROR: This script is designed to run on Ubuntu 24.04. Exiting."
+# Check if the script is running on Ubuntu 26.x
+if ! grep -q "DISTRIB_RELEASE=26\." /etc/lsb-release; then
+    echo "ERROR: This script is designed to run on Ubuntu 26.x. Exiting."
     exit 1
 fi
 
@@ -35,6 +35,7 @@ print_header "Installing basic and identified packages..."
 packages_to_install=(
     # System and network tools
     nmap
+    masscan
     curl
     wget # For downloading files
     terminator # Terminal emulator
@@ -62,6 +63,7 @@ packages_to_install=(
     libcharon-extra-plugins # Plugins for strongswan
     xl2tpd # L2TP VPN client
     nfs-common # For NFS support
+    samba # SMB/CIFS server
     cifs-utils # For SMB/CIFS share support
     keyutils # For kernel key management
     pass # Password manager
@@ -77,6 +79,9 @@ packages_to_install=(
 
     # Developer tools
     git
+    gitk
+    git-gui
+    git-lfs # Git Large File Storage
     vim
     mc # Midnight Commander, a file manager
     meld # File and directory comparison tool
@@ -185,8 +190,44 @@ else
         && sudo apt install gh -y
 fi
 
+CURRENT_USER="${USER:-$(id -un)}"
+
+# --- SECTION: INSTALLATION OF DOCKER ---
+print_header "Installing Docker..."
+if command -v docker >/dev/null 2>&1; then
+    echo "Docker is already installed. Skipping installation."
+else
+    echo "Docker not found. Installing from the official Docker repository..."
+    sudo apt remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc || true
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+        | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt update
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y \
+        docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+fi
+if getent group docker >/dev/null; then
+    sudo usermod -aG docker "$CURRENT_USER"
+fi
+print_header "Docker installation finished."
+echo ""
+
+# --- SECTION: INSTALLATION OF VIRTUALBOX ---
+print_header "Installing VirtualBox..."
+# Pre-accept the Oracle extension pack license so apt does not prompt
+echo "virtualbox-ext-pack virtualbox-ext-pack/license select true" | sudo debconf-set-selections
+sudo DEBIAN_FRONTEND=noninteractive apt install -y \
+    virtualbox virtualbox-ext-pack virtualbox-guest-additions-iso
+if getent group vboxusers >/dev/null; then
+    sudo usermod -aG vboxusers "$CURRENT_USER"
+fi
+print_header "VirtualBox installation finished."
+echo ""
+
 # --- SECTION: MANUAL DEBIAN PACKAGE INSTALLATION ---
-print_header "Installing Visual Studio Code and Slack via .deb packages..."
+print_header "Installing Visual Studio Code via .deb package..."
 
 # Temporary directory for downloading .deb files
 TEMP_DIR="/tmp/deb_packages"
@@ -195,7 +236,6 @@ mkdir -p "$TEMP_DIR"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 VSCODE_DEB="$TEMP_DIR/code.deb"
-SLACK_DEB="$TEMP_DIR/slack.deb"
 
 download_and_install() {
     local url=$1
@@ -216,9 +256,7 @@ download_and_install() {
 }
 
 download_and_install "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" "$VSCODE_DEB" "Visual Studio Code"
-# It looks like the URL for Slack deb package always contains version number
-download_and_install "https://downloads.slack-edge.com/desktop-releases/linux/x64/4.43.51/slack-desktop-4.43.51-amd64.deb" "$SLACK_DEB" "Slack"
-print_header "Manual installation of Visual Studio Code and Slack finished."
+print_header "Manual installation of Visual Studio Code finished."
 echo ""
 
 # --- SECTION: COPYING DOTFILES ---
@@ -236,6 +274,8 @@ echo "If you encounter any issues, please check the log file at $LOG_FILE."
 echo "Remember to manually:"
 echo " - change the default shell to Zsh using: chsh -s /usr/bin/zsh"
 echo " - do in vim :PlugInstall to install plugins."
+echo " - log out and back in to apply 'docker' and 'vboxusers' group membership."
+echo " - if Secure Boot is enabled, enroll the MOK key so the vboxdrv module can load."
 echo "Please check git setup: "
 echo "Name: $(git config --global user.name)"
 echo "Email: $(git config --global user.email)"

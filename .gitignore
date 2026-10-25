@@ -1,0 +1,8 @@
+# Never commit personal secret substrings used by zsh_history_sanitize.py
+secret-words.txt
+secret_words.txt
+*.secret-words
+# Sanitiser artefacts
+*.zsh_history*
+redactions.txt
+review.txt

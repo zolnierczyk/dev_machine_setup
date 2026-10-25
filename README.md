@@ -62,7 +62,7 @@ This guide explains how to run the `setup_machine.bash` script in a safe and iso
 
 ## Notes
 
-- The Docker container uses an Ubuntu 24.04 base image.
+- The Docker container uses an Ubuntu 26.04 base image.
 - The script is run as a non-root user for safety.
 - The container is ephemeral; any changes made inside it will be lost when it is stopped.
 
@@ -126,6 +126,34 @@ The `dump_config.bash` script is used to extract user configurations from the sy
 
    Ensure that the archive file (e.g., `config_backup_<date>.tar.gz`) is created successfully in the `configs/` directory.
 
+#### Sanitising the dumped Zsh history
+
+By default `dump_config.bash` runs `zsh_history_sanitize.py` on `~/.zsh_history`
+before adding it to the dump, so the archive carries no passwords or tokens.
+
+```bash
+./dump_config.bash ~/config_dump                      # history is sanitised
+./dump_config.bash --no-sanitize ~/config_dump        # verbatim history (unsafe)
+./dump_config.bash --report ~/redactions.txt ~/config_dump
+./dump_config.bash --secret-words-file ~/words.txt ~/config_dump
+```
+
+| Option | Effect |
+| --- | --- |
+| `--no-sanitize` | Copy the history verbatim. The dump will contain secrets. |
+| `--secret-words-file FILE` | Custom secret substrings. Defaults to `$HOME/.config/zsh-sanitize/secret-words.txt` (or `$ZSH_SANITIZE_WORDS`), skipped when absent. |
+| `--report FILE` | Write the before/after redaction report to `FILE`. |
+| `-h`, `--help` | Show usage. |
+
+Safety behaviour:
+
+- **Fail closed** - if `zsh_history_sanitize.py` or `python3` is missing, the
+  script aborts instead of dumping an unsanitised history. `--no-sanitize` is
+  the only way to get a verbatim copy.
+- `--report` is rejected when it points inside the destination folder, because
+  the report holds the *original* secrets and would be archived with the dump.
+- The dumped history and the resulting archive are created with mode `600`.
+
 ### `install_config.bash`
 
 The `install_config.bash` script is used to restore configurations from the archive created by `dump_config.bash`. It ensures that existing files are backed up before being replaced.
@@ -154,3 +182,145 @@ The `install_config.bash` script is used to restore configurations from the arch
 
 - Ensure that the `dump_config.bash` script is run before using `install_config.bash` to create a valid archive.
 - Both scripts are designed to work seamlessly together for configuration management.
+
+## Shell Usage Analytics: `zsh_stats.py`
+
+The `zsh_stats.py` script analyses a Zsh *extended* history file and prints a text
+report describing how the shell is actually being used. It is useful for finding
+alias/script candidates, spotting abandoned tooling and understanding working
+patterns.
+
+### Requirements
+
+- Python 3 (standard library only, no external dependencies).
+- A history file in Zsh extended format, i.e. lines like
+  `: <epoch>:<duration>;<command>`. This requires `setopt EXTENDED_HISTORY`
+  in `.zshrc`.
+
+### Usage
+
+```bash
+./zsh_stats.py                      # analyses ~/.zsh_history
+./zsh_stats.py /path/to/.zsh_history
+TOP=40 ./zsh_stats.py               # widen the top-N tables (default 25)
+./zsh_stats.py > report.txt         # save the full report
+```
+
+### Report sections
+
+- **Overview** – number of entries, unique command lines, distinct programs,
+  time span, active days, commands per day, average command length, share of
+  pipes and `sudo`, detected shell sessions (gap > 2 h), median think-time
+  between commands and the immediate-repeat (retry) rate.
+- **Command transitions** – most frequent `A -> B` pairs, showing typical
+  workflows.
+- **Top programs** – most frequently invoked executables.
+- **Coverage / concentration** – how many programs make up 50/80/90/95/99 % of
+  all invocations, plus the size of the one-off "long tail".
+- **Top full command lines** – verbatim repeats, i.e. direct alias candidates.
+- **Sub-command breakdown** – for multi-tool CLIs such as `git`, `docker`,
+  `apt`, `pip` or `gh`.
+- **Top flags** and **top directories** referenced in arguments.
+- **Activity by hour / weekday / month** and **busiest days** – ASCII histograms.
+- **Tool lifecycle** – tools adopted in the last 90 days versus tools dropped
+  more than 180 days ago.
+- **Alias / script suggestions** – repeated long command lines ranked by the
+  number of keystrokes they would save.
+- **Typo / failure signals** – rare very short tokens that are likely typos or
+  aborted command lines.
+
+### Implementation notes
+
+- Pipelines are split on `|`, `||`, `&&` and `;`, so every stage is counted.
+- Wrappers (`sudo`, `time`, `env`, `nohup`, `xargs`, `watch`, ...) and leading
+  `VAR=value` assignments are skipped when determining the actual program.
+- Multi-line history entries and Zsh's escaped-newline artefacts are normalised.
+- Output is pipe-safe, so `./zsh_stats.py | head` works without a traceback.
+
+### Getting richer data
+
+The duration field in the history file is normally `0`. To capture command
+duration, exit status and the working directory, additional `preexec`/`precmd`
+hooks have to be added to `.zshrc`; the script currently reports only what the
+standard extended history provides.
+
+## History Sanitisation: `zsh_history_sanitize.py`
+
+The `zsh_history_sanitize.py` script strips secrets from a Zsh *extended* history
+file so it can safely be migrated to another machine. Timestamps, ordering and
+command structure are preserved; only secret values are replaced with
+`<REDACTED>`.
+
+### Requirements
+
+- Python 3.8+, no third-party dependencies.
+- A history file in extended format (`: <timestamp>:<elapsed>;<command>`).
+  Multi-line entries and Zsh's escaped-newline artefacts are handled.
+
+### Usage
+
+```bash
+./zsh_history_sanitize.py ~/.zsh_history -o ~/.zsh_history.clean \
+    --report redactions.txt --review review.txt
+```
+
+Copy the resulting `.clean` file to the new machine as `~/.zsh_history`
+(mode `600`) after reviewing the report.
+
+### Options
+
+| Option | Effect |
+| --- | --- |
+| `-o`, `--output` | Destination for the sanitised history (required). |
+| `--report FILE` | Before/after line for every modified entry. |
+| `--review FILE` | Entries that merit a manual look but contain no secret. |
+| `--secret-words-file FILE` | Custom secret substrings, one per line. |
+| `--entropy` | Also redact standalone high-entropy blobs (may over-redact). |
+| `--entropy-threshold` | Shannon-entropy cut-off for the above (default `3.5`). |
+| `--mask-ips` | Replace public IP addresses with `<IP>`. |
+| `--drop-unsafe` | Delete entries that cannot be safely redacted. |
+
+### What gets redacted
+
+- Credentials embedded in URLs: `https://user:<REDACTED>@host`.
+- Vendor token shapes: GitHub (`ghp_`, `github_pat_`), GitLab, Slack, AWS keys,
+  Google API keys, OpenAI/Anthropic `sk-` keys, JWTs, PEM private-key headers.
+- Secret-bearing flags: `--pw`, `--password`, `--token`, `--api-key`,
+  `--secret`, `--passphrase` and friends, in both `--flag X` and `--flag=X` form.
+- `sshpass -p`, database passwords glued to `-p`, `curl -u user:pass`,
+  `Authorization` / `X-Api-Key` headers, `.netrc`-style `password` lines.
+- Environment assignments whose name looks secret (`*_TOKEN`, `*_SECRET`, ...).
+
+### Custom secret substrings
+
+Personal password fragments are supplied through a file rather than a command
+line argument, because an argument would itself be written into the history
+being sanitised:
+
+```bash
+mkdir -p ~/.config/zsh-sanitize
+printf '%s\n' 'MyPasswordFragment' > ~/.config/zsh-sanitize/secret-words.txt
+chmod 600 ~/.config/zsh-sanitize/secret-words.txt
+
+./zsh_history_sanitize.py ~/.zsh_history -o ~/.zsh_history.clean \
+    --secret-words-file ~/.config/zsh-sanitize/secret-words.txt
+```
+
+Matching is case-insensitive and the **whole token** containing the fragment is
+removed, so `MyPasswordFragment2024!` disappears in full. Lines starting with
+`re:` are treated as regular expressions, `#` marks a comment.
+
+**Keep this file local - never copy it to the target machine, and never commit
+it to this repository.**
+
+### Implementation notes
+
+- Rules run in order: structural rules (URLs, flags, headers) fire before the
+  custom-wordlist rule, so useful context such as `git clone https://user:<REDACTED>@...`
+  survives instead of the whole argument being erased.
+- Narrow rules carry a required command context, which prevents false positives
+  such as `docker run --user 1000:1000` being mistaken for `user:password`.
+- Empty values (`--pw ""`) are preserved: they carry meaning and are not secrets.
+- Names containing `PATH` are never treated as secrets, so `PYTHONPATH` and
+  `LD_LIBRARY_PATH` survive a naive `PAT` match.
+- Verify the result loads before migrating: `zsh -f -c 'fc -p ~/.zsh_history.clean'`.

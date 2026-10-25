@@ -1,5 +1,5 @@
 # Use an official Ubuntu image as the base
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 # Set environment variables to avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
