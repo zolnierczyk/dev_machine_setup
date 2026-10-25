@@ -108,9 +108,110 @@ The `dump_config.bash` script is used to extract user configurations from the sy
 
 #### Features
 
-- Copies configurations for tools like VIM, XFCE, Visual Studio Code, Zsh, and Midnight Commander.
+- Copies configurations for tools like VIM, XFCE, Visual Studio Code, Zsh,
+  Powerlevel10k, Terminator and Midnight Commander.
 - Creates destination directories as needed.
+- Sanitises the Zsh history before adding it to the dump (see below).
 - Generates a compressed archive containing the extracted configurations and the `install_config.bash` script.
+
+#### Dump layout
+
+Everything that belongs in `$HOME` is stored under `home/` inside the dump,
+keeping its original relative path, and every stored path is listed in
+`MANIFEST`:
+
+```
+config_dump/
+├── RESTORE_MANIFEST         # paths relative to $HOME, one per line
+├── manifest.txt             # machine the dump was taken from
+├── info/                    # reference lists (not restored automatically)
+├── install_config.bash      # restore script (not restored into $HOME)
+├── config_backup_<date>.tar.gz
+├── config_backup_<date>.tar.gz.sha256
+└── home/
+    ├── .zshrc
+    ├── .p10k.zsh
+    ├── .zsh_history         # sanitised, mode 600
+    ├── .vimrc
+    ├── .vim/
+    ├── .oh-my-zsh/custom/   # only the user-owned part of Oh-My-Zsh
+    └── .config/
+        ├── terminator/
+        ├── mc/
+        ├── xfce4/panel/
+        └── Code/User/{settings.json,keybindings.json,snippets/}
+```
+
+`install_config.bash` walks `RESTORE_MANIFEST` and restores each entry to `$HOME/<path>`.
+This is what makes dotfiles work: the previous version globbed the extracted
+folder with `"$temp_dir"/*`, and a shell glob skips every name starting with a
+dot, so `.zshrc`, `.vimrc` and `.vim` were dumped but never restored, while the
+remaining files were flattened into `$HOME` under their dump names
+(`vscode_settings.json` instead of `.config/Code/User/settings.json`).
+
+Only `.oh-my-zsh/custom` is dumped - the framework itself is reinstalled by
+`setup_machine.bash`, and skipping its checkout shrinks the archive from about
+11 MB to 1.3 MB.
+
+Archives created before the `RESTORE_MANIFEST` format are rejected by
+`install_config.bash` with a message to recreate them.
+
+#### Machine manifest and checksum
+
+`manifest.txt` records the machine the dump came from and is stored inside the
+archive, so the target machine can be compared against the source:
+
+- `[dump]` - creation time, whether the history was sanitised, entry count.
+- `[machine]` - hostname, user, OS, kernel, architecture, CPU, memory, locale,
+  timezone, desktop, login shell and the dev-relevant local groups
+  (`docker`, `vboxusers`, ...), which have to be recreated on the new machine.
+- `[tools]` - versions of `zsh`, `git`, `python3`, `docker`, `code`, `gh` and
+  friends.
+
+The environment is deliberately **not** recorded, because it routinely holds
+tokens, and the full group list is filtered down to local groups only.
+
+`config_backup_<date>.tar.gz.sha256` sits next to the archive and stores only
+the base name, so it can be checked directly:
+
+```bash
+cd config_dump && sha256sum -c config_backup_<date>.tar.gz.sha256
+```
+
+`install_config.bash` verifies this automatically when the file is present and
+aborts on a mismatch; if it is absent it warns and continues. After extracting,
+it prints a short summary of the source machine.
+
+#### Reference lists (`info/`)
+
+| File | Contents |
+| --- | --- |
+| `vscode_extensions.txt` | `code --list-extensions` output, one ID per line. |
+| `apt_manual_packages.txt` | `apt-mark showmanual` - packages you asked for, without pulled-in dependencies. |
+| `snap_packages.txt` | `snap list`, when snap is present. |
+| `pip_user_packages.txt` | `pip3 list --user --format=freeze`. |
+| `npm_global_packages.txt` | `npm ls -g --depth=0`. |
+
+These lists are **informational**. `install_config.bash` copies them to
+`~/config_dump_info/` on the target machine and installs nothing from them, with
+one opt-in exception:
+
+```bash
+./install_config.bash --install-vscode-extensions config_backup_<date>.tar.gz
+```
+
+That runs `code --install-extension --force` for every ID in
+`vscode_extensions.txt`, reports per-extension success or failure, and keeps
+going when a single extension fails. Without the flag it only prints a hint.
+It aborts if the `code` CLI is unavailable.
+
+The package lists are intentionally never replayed: the new machine's
+distribution and `setup_machine.bash` already provide most of them. Install what
+you actually need after reviewing:
+
+```bash
+grep -v '^#' ~/config_dump_info/apt_manual_packages.txt | xargs sudo apt install -y
+```
 
 #### Usage
 
@@ -161,8 +262,11 @@ The `install_config.bash` script is used to restore configurations from the arch
 #### Features
 
 - Extracts the archive into a temporary directory.
-- Copies configuration files to their original locations.
+- Reads `MANIFEST` and restores every entry to its original path under `$HOME`,
+  including dotfiles and nested paths such as `.config/terminator`.
 - Creates backups of existing files before overwriting them.
+- Re-applies mode `600` to the restored `.zsh_history`.
+- Aborts on archives that contain no `MANIFEST`.
 
 #### Usage
 
