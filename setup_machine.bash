@@ -129,7 +129,6 @@ packages_to_install=(
     vlc # Multimedia player
     ffmpeg # Multimedia conversion and streaming tool
     baobab # Disk usage analyzer
-    ntp # Network Time Protocol (replaced by systemd-timesyncd, but might be needed)
     chrony # NTP implementation, often used as a replacement for ntpd
     shutter # Screenshot tool
     gimp # Raster graphics editor
