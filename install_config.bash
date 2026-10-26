@@ -2,11 +2,14 @@
 set -euo pipefail
 
 INSTALL_VSCODE_EXT=0
-ARCHIVE_FILE=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
     cat <<USAGE
-Usage: $0 [options] <config_archive.tar.gz>
+Usage: $0 [options]
+
+Restore configurations from the extracted dump beside this script.
+RESTORE_MANIFEST and home/ must be in the same directory as this script.
 
 Options:
   --install-vscode-extensions  Install the VS Code extensions listed in
@@ -34,49 +37,34 @@ while [ "$#" -gt 0 ]; do
             exit 1
             ;;
         *)
-            [ -z "$ARCHIVE_FILE" ] || { echo "ERROR: Only one archive may be given." >&2; exit 1; }
-            ARCHIVE_FILE="$1"
-            shift
+            echo "ERROR: Unexpected argument: $1. Run this script from an extracted dump without an archive argument." >&2
+            usage >&2
+            exit 1
             ;;
     esac
 done
 
-if [ -z "$ARCHIVE_FILE" ]; then
-    usage >&2
+# Validate the extracted layout before changing anything in HOME.
+MANIFEST_FILE="$SCRIPT_DIR/RESTORE_MANIFEST"
+DUMP_HOME="$SCRIPT_DIR/home"
+if [ ! -f "$MANIFEST_FILE" ]; then
+    echo "ERROR: No RESTORE_MANIFEST found in $SCRIPT_DIR." >&2
+    echo "ERROR: Extract a dump created by dump_config.bash and run its install_config.bash." >&2
+    exit 1
+fi
+if [ ! -d "$DUMP_HOME" ]; then
+    echo "ERROR: No home/ directory found in $SCRIPT_DIR. Extract the complete dump before restoring." >&2
     exit 1
 fi
 
-# Check if the archive file exists
-if [ ! -f "$ARCHIVE_FILE" ]; then
-    echo "ERROR: Archive file $ARCHIVE_FILE does not exist. Exiting."
-    exit 1
-fi
-
-# Verify the archive against its checksum when dump_config.bash produced one.
-CHECKSUM_FILE="$ARCHIVE_FILE.sha256"
-if [ -f "$CHECKSUM_FILE" ]; then
-    echo "Verifying archive against $CHECKSUM_FILE..."
-    if ( cd "$(dirname "$ARCHIVE_FILE")" && sha256sum -c "$(basename "$CHECKSUM_FILE")" ); then
-        echo "Checksum OK."
-    else
-        echo "ERROR: Checksum mismatch. The archive is corrupted or was modified." >&2
-        exit 1
-    fi
-else
-    echo "WARNING: No checksum file next to the archive; skipping integrity check."
-fi
-
-# Extract the archive to a temporary directory
-temp_dir=$(mktemp -d)
-echo "Extracting configuration archive to temporary directory: $temp_dir"
-tar -xzf "$ARCHIVE_FILE" -C "$temp_dir"
+echo "Restoring configurations from $SCRIPT_DIR"
 
 # Show which machine the dump came from.
-if [ -f "$temp_dir/manifest.txt" ]; then
+if [ -f "$SCRIPT_DIR/manifest.txt" ]; then
     echo
     echo "--- Source machine ---"
-    grep -E '^(created|hostname|user|os|kernel|architecture) ' "$temp_dir/manifest.txt" || true
-    echo "Full details: manifest.txt inside the archive."
+    grep -E '^(created|hostname|user|os|kernel|architecture) ' "$SCRIPT_DIR/manifest.txt" || true
+    echo "Full details: $SCRIPT_DIR/manifest.txt"
     echo "----------------------"
     echo
 fi
@@ -100,27 +88,12 @@ copy_with_backup() {
 }
 
 # Restore every path listed in RESTORE_MANIFEST to its original location.
-# The manifest stores paths relative to $HOME, which keeps dotfiles and nested
-# paths such as .config/terminator working. The previous implementation globbed
-# the extracted folder with "$temp_dir"/*, which silently skipped every entry
-# whose name starts with a dot (.zshrc, .vimrc, .vim) and flattened the rest
-# into $HOME under the wrong name.
-MANIFEST_FILE="$temp_dir/RESTORE_MANIFEST"
-DUMP_HOME="$temp_dir/home"
-
-if [ ! -f "$MANIFEST_FILE" ]; then
-    echo "ERROR: No RESTORE_MANIFEST found in $ARCHIVE_FILE." >&2
-    echo "ERROR: The archive predates the manifest format; recreate it with dump_config.bash." >&2
-    rm -rf "$temp_dir"
-    exit 1
-fi
-
 restored=0
 while IFS= read -r rel; do
     [ -n "$rel" ] || continue
     src_file="$DUMP_HOME/$rel"
     if [ ! -e "$src_file" ]; then
-        echo "WARNING: $rel is listed in RESTORE_MANIFEST but missing from the archive. Skipping."
+        echo "WARNING: $rel is listed in RESTORE_MANIFEST but missing from the dump. Skipping."
         continue
     fi
     copy_with_backup "$src_file" "$HOME/$rel"
@@ -135,13 +108,12 @@ if [ -e "$HOME/.zsh_history" ]; then
 fi
 
 # Optionally reinstall the VS Code extensions recorded in the dump.
-EXT_LIST="$temp_dir/info/vscode_extensions.txt"
+EXT_LIST="$SCRIPT_DIR/info/vscode_extensions.txt"
 if [ "$INSTALL_VSCODE_EXT" -eq 1 ]; then
     if [ ! -f "$EXT_LIST" ]; then
-        echo "WARNING: No info/vscode_extensions.txt in the archive. Nothing to install."
+        echo "WARNING: No info/vscode_extensions.txt in the dump. Nothing to install."
     elif ! command -v code >/dev/null 2>&1; then
         echo "ERROR: --install-vscode-extensions was requested but the 'code' CLI is missing." >&2
-        rm -rf "$temp_dir"
         exit 1
     else
         echo "Installing VS Code extensions..."
@@ -166,19 +138,14 @@ elif [ -f "$EXT_LIST" ]; then
     echo "Re-run with --install-vscode-extensions to install them."
 fi
 
-# Point at the informational lists before the temporary copy disappears.
-if [ -d "$temp_dir/info" ]; then
+if [ -d "$SCRIPT_DIR/info" ]; then
     saved_info="$HOME/config_dump_info"
     rm -rf "$saved_info"
-    cp -a "$temp_dir/info" "$saved_info"
+    cp -a "$SCRIPT_DIR/info" "$saved_info"
     echo
     echo "Reference lists copied to $saved_info:"
     ls -1 "$saved_info" | sed 's/^/  /'
     echo "These are informational. Nothing from them is installed automatically."
 fi
-
-# Clean up temporary directory
-echo "Cleaning up temporary directory: $temp_dir"
-rm -rf "$temp_dir"
 
 echo "Configuration files have been restored successfully."

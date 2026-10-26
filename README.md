@@ -118,7 +118,7 @@ The `dump_config.bash` script is used to extract user configurations from the sy
 
 Everything that belongs in `$HOME` is stored under `home/` inside the dump,
 keeping its original relative path, and every stored path is listed in
-`MANIFEST`:
+`RESTORE_MANIFEST`:
 
 ```
 config_dump/
@@ -178,9 +178,10 @@ the base name, so it can be checked directly:
 cd config_dump && sha256sum -c config_backup_<date>.tar.gz.sha256
 ```
 
-`install_config.bash` verifies this automatically when the file is present and
-aborts on a mismatch; if it is absent it warns and continues. After extracting,
-it prints a short summary of the source machine.
+Verify the checksum before extracting the archive when the checksum file is
+available. The installer works on the already-extracted dump, not the archive,
+and does not verify the archive checksum. It prints a short summary of the
+source machine from the extracted `manifest.txt`.
 
 #### Reference lists (`info/`)
 
@@ -197,7 +198,7 @@ These lists are **informational**. `install_config.bash` copies them to
 one opt-in exception:
 
 ```bash
-./install_config.bash --install-vscode-extensions config_backup_<date>.tar.gz
+./install_config.bash --install-vscode-extensions
 ```
 
 That runs `code --install-extension --force` for every ID in
@@ -257,28 +258,42 @@ Safety behaviour:
 
 ### `install_config.bash`
 
-The `install_config.bash` script is used to restore configurations from the archive created by `dump_config.bash`. It ensures that existing files are backed up before being replaced.
+The `install_config.bash` script restores configurations from the extracted dump
+beside the script. It ensures that existing files are backed up before being
+replaced.
 
 #### Features
 
-- Extracts the archive into a temporary directory.
-- Reads `MANIFEST` and restores every entry to its original path under `$HOME`,
+- Uses its own directory as the dump root, regardless of the current working directory.
+- Reads `RESTORE_MANIFEST` and restores every entry to its original path under `$HOME`,
   including dotfiles and nested paths such as `.config/terminator`.
 - Creates backups of existing files before overwriting them.
 - Re-applies mode `600` to the restored `.zsh_history`.
-- Aborts on archives that contain no `MANIFEST`.
+- Aborts if `RESTORE_MANIFEST` or `home/` is missing beside the script.
+- Leaves the extracted dump in place after restoring.
 
 #### Usage
 
-1. **Run the Script**:
+1. **Extract the Archive**:
 
    ```bash
-   ./install_config.bash <config_archive.tar.gz>
+   mkdir -p ~/config_restore
+   tar -xzf config_backup_<date>.tar.gz -C ~/config_restore
    ```
 
-   Replace `<config_archive.tar.gz>` with the path to the archive file.
+   Replace `config_backup_<date>.tar.gz` with the path to your archive.
+   Verify its checksum first when the `.sha256` file is available.
 
-2. **Verify Restoration**:
+2. **Run the Bundled Script Without an Archive Argument**:
+
+   ```bash
+   bash ~/config_restore/install_config.bash
+   ```
+
+   The script reads `RESTORE_MANIFEST`, `home/`, `manifest.txt` and `info/`
+   from `~/config_restore`. You can run it from any working directory.
+
+3. **Verify Restoration**:
 
    Check that the configuration files have been restored to their original locations and that backups of existing files have been created.
 
